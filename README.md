@@ -90,10 +90,6 @@ This version implements and compares two backbone architectures across two loss 
 
 ![Threshold Calibration — EfficientNetB0 + Triplet](images/fv_threshold_efficientnet_triplet.png)
 
-### Training Curves
-
-![Training Curves](images/fv_training_curves.png)
-
 ### Inference Examples
 
 ![Inference — Same Person](images/fv_inference_same_1.png)
