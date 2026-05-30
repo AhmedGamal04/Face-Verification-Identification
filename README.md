@@ -1,20 +1,15 @@
-# Face Verification & Identification
+# Face Verification & Identification — V1
 > **CIE 555 — Neural Networks and Deep Learning**  
-> University of Science and Technology, Zewail City · Spring 2026
+> University of Science and Technology, Zewail City · Spring 2026  
+> **Status: 🚧 Work in Progress — V2 coming with MTCNN face cropping, ResNet50V2, InceptionResNetV2, and hard triplet mining**
 
 ---
 
 ## Overview
 
-A full deep learning pipeline for **face verification** on the LFW (Labeled Faces in the Wild) dataset — determining whether two face images belong to the same person.
+A deep learning pipeline for **face verification** on the LFW (Labeled Faces in the Wild) dataset — determining whether two face images belong to the same person using Siamese Networks.
 
-The project implements and compares three architectures across two loss paradigms, following the progression from a custom CNN baseline to DeepFace-style and FaceNet-style transfer learning models.
-
----
-
-## Central Question
-
-> **Given two face images, do they belong to the same person?**
+This version implements and compares two backbone architectures across two loss functions, forming a 2×2 experimental grid.
 
 ---
 
@@ -23,68 +18,121 @@ The project implements and compares three architectures across two loss paradigm
 | Property | Details |
 |----------|---------|
 | Source | [LFW — Labeled Faces in the Wild](https://www.kaggle.com/datasets/jessicali9530/lfw-dataset) |
-| Identities (after filtering) | ~1,000+ individuals |
 | Filter criteria | ≥ 12 images per identity |
-| Identity cap | ≤ 30 images per identity (class balance fix) |
-| Split | Identity-level 80/20 train/val — validation contains fully unseen people |
+| Split | Identity-level 80/20 — validation contains fully unseen people |
+
+### Identity Distribution (after filtering)
+
+![Identity Distribution](images/fv_identity_distribution.png)
+
+> **Known limitation:** The dataset is heavily imbalanced at the identity level — a few celebrities (e.g. George W. Bush: 530 images) dominate the distribution. V2 will apply a per-identity image cap to fix this.
+
+### Sample Identities
+
+![Sample Identities](images/fv_sample_identities.png)
 
 ---
 
-## Pipeline
+## Experiments
 
-### Preprocessing
-- **MTCNN face detection**: automatically detects and crops the face region from each image with a 15% margin, eliminating background, hair, and clothing noise
-- Images resized to **160×160** (FaceNet standard)
-- Normalized to [0, 1]
-- Identity-level train/val split ensures no identity leakage into validation
+### 2×2 Experimental Grid
 
-### Models
+| | **Contrastive Loss** | **Triplet Loss** |
+|---|---|---|
+| **Custom CNN** | ✅ | ✅ |
+| **EfficientNetB0** | ✅ | ✅ |
 
-| Model | Backbone | Approach | Loss |
-|-------|----------|----------|------|
-| **Custom CNN** | 4-block CNN (32→64→128→256) | Pairs | Binary Cross-Entropy |
-| **Custom CNN** | 4-block CNN (32→64→128→256) | Triplets | Triplet Loss |
-| **DeepFace-style** | ResNet50V2 (pretrained) | Pairs | Binary Cross-Entropy |
-| **FaceNet-style** | InceptionResNetV2 (pretrained) | Triplets | Triplet Loss + Hard Mining |
+### Architecture 1 — Custom CNN Backbone
+- 4 convolutional blocks: 32 → 64 → 128 → 256 filters
+- BatchNormalization after every conv layer
+- Progressive Dropout: 0.15 → 0.20 → 0.25 → 0.30
+- GlobalAveragePooling → Dense(256) → L2-normalized embedding
 
-### Key Implementation Details
-- **Both loss functions implemented manually from scratch** (no library loss functions used)
-- **L2-normalized embeddings** on unit hypersphere for all models — consistent distance scale across batches
-- **Two-phase training** for pretrained backbones: frozen warm-up → partial unfreeze fine-tuning
-- **Semi-hard triplet mining** (FaceNet-style): selects hard positives (max intra-class distance) and semi-hard negatives (violates margin but avoids collapse)
-- **F1-calibrated thresholds**: optimal decision threshold found by sweeping F1 score, not fixed at 0.5
+### Architecture 2 — EfficientNetB0 (Transfer Learning)
+- Pretrained on ImageNet, top layers replaced
+- Fine-tuned from layer 150 onward
+- Why EfficientNetB0: best accuracy/parameter tradeoff via compound scaling
 
-### Evaluation
-- Validation accuracy (threshold-calibrated)
-- AUC-ROC (threshold-independent)
-- Best F1 score + optimal threshold per model
-- Distance distribution plots (same vs different person overlap)
-- Full inference pipeline: takes two image paths → returns distance, decision, visual display
+### Loss Functions (both implemented manually)
+- **Contrastive Loss** (margin = 1.0): pair-based, pulls same-person embeddings together
+- **Triplet Loss** (margin = 0.4): triplet-based, enforces d(a,p) < d(a,n) + margin
+
+---
+
+## Results
+
+### ROC Curves & AUC
+
+| Model | AUC-ROC |
+|-------|---------|
+| Custom CNN + Contrastive | **0.7719** |
+| EfficientNetB0 + Contrastive | 0.7369 |
+| EfficientNetB0 + Triplet | 0.7547 |
+| Custom CNN + Triplet | 0.7147 |
+
+![ROC — Custom CNN + Contrastive](images/fv_roc_cnn_contrastive.png)
+
+![ROC — EfficientNetB0 + Contrastive](images/fv_roc_efficientnet_contrastive.png)
+
+![ROC — Custom CNN + Triplet](images/fv_roc_cnn_triplet.png)
+
+![ROC — EfficientNetB0 + Triplet](images/fv_roc_efficientnet_triplet.png)
+
+### Distance Distributions
+
+![Distance Distribution — Custom CNN + Contrastive](images/fv_dist_cnn_contrastive.png)
+
+![Distance Distribution — EfficientNetB0 + Contrastive](images/fv_dist_efficientnet_contrastive.png)
+
+### Threshold Calibration
+
+![Threshold Calibration — EfficientNetB0 + Contrastive](images/fv_threshold_efficientnet_contrastive.png)
+
+![Threshold Calibration — EfficientNetB0 + Triplet](images/fv_threshold_efficientnet_triplet.png)
+
+### Training Curves
+
+![Training Curves](images/fv_training_curves.png)
+
+### Inference Examples
+
+![Inference — Same Person](images/fv_inference_same_1.png)
+
+![Inference — Same Person](images/fv_inference_same_2.png)
+
+---
+
+## Planned Improvements (V2)
+
+- [ ] **MTCNN face detection**: crop facial region automatically, remove background/clothing noise
+- [ ] **Identity-level image cap**: fix class imbalance by capping dominant identities
+- [ ] **ResNet50V2**: replace EfficientNetB0 for DeepFace-style pair verification
+- [ ] **InceptionResNetV2**: FaceNet-style backbone with semi-hard triplet mining
+- [ ] **Hard triplet mining**: select hard positives and semi-hard negatives instead of random triplets
+- [ ] **Binary Cross-Entropy** as an additional loss paradigm
 
 ---
 
 ## Tech Stack
 
 - **Python 3**
-- **TensorFlow / Keras** — model building and training
-- **MTCNN** — face detection and cropping
-- **NumPy** — embedding operations, hard mining
-- **scikit-learn** — AUC-ROC, F1, train/val split
-- **Matplotlib / Seaborn** — all visualizations
+- **TensorFlow / Keras**
+- **NumPy, scikit-learn**
+- **Matplotlib**
+- **KaggleHub**
 
 ---
 
 ## File Structure
 
 ```
-├── Face_Verification_Identification.ipynb   # Full pipeline
-├── requirements.txt                         # Dependencies
-├── report.pdf
+├── Face_verification_V1.ipynb   # Full pipeline
+├── images/                      # All result plots
 └── README.md
 ```
 
 ---
 
-> **Note:** MTCNN requires `lz4` for loading pretrained weights. Make sure it is installed before running.
+## Author
 
----
+**Ahmed Gamal** — [@AhmedGamal04](https://github.com/AhmedGamal04)
